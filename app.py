@@ -102,10 +102,11 @@ def _run_compare_job(job_id: str, req: CompareByUrlRequest) -> None:
         urllib.request.urlretrieve(req.teacher_url, teacher_path)
         urllib.request.urlretrieve(req.student_url, student_path)
 
+        result_dir = job_dir / "result"
         summary = run_comparison(
             teacher_path,
             student_path,
-            job_dir / "result",
+            result_dir,
             max_frames=req.max_frames,
             align=req.align,
             use_beats=req.beats,
@@ -113,6 +114,17 @@ def _run_compare_job(job_id: str, req: CompareByUrlRequest) -> None:
             max_downbeats=req.max_downbeats,
         )
         summary["job_id"] = job_id
+
+        # run_comparison returns absolute server-side paths; the client only
+        # has GET /jobs/{job_id}/files/{rel_path}, so rewrite them relative to
+        # result_dir before handing the summary back.
+        outputs = summary.get("outputs", {})
+        for key in ("video", "chart", "report"):
+            if outputs.get(key):
+                outputs[key] = str(Path(outputs[key]).relative_to(result_dir))
+        for key in ("moments", "beats"):
+            outputs[key] = [str(Path(p).relative_to(result_dir)) for p in outputs.get(key, [])]
+
         with JOBS_LOCK:
             JOBS[job_id] = {"status": "done", "summary": summary}
     except Exception as e:
