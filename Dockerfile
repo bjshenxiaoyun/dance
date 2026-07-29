@@ -12,7 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# mediapipe/librosa 等大包走官方 PyPI 在国内构建机上很慢，改用腾讯云内网镜像源，
+# 构建机和镜像源同在腾讯云网络内，下载速度快很多；--prefer-binary 优先用预编译 wheel，
+# 避免个别包在没有编译工具链的 slim 镜像里退回源码编译（更慢，甚至可能直接编译失败）。
+RUN pip install --no-cache-dir --prefer-binary \
+    -i https://mirrors.cloud.tencent.com/pypi/simple \
+    -r requirements.txt
 
 COPY . .
 
