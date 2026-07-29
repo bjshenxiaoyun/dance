@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parent
@@ -149,9 +149,38 @@ def get_job_status(job_id: str) -> dict:
 
 
 @app.get("/jobs/{job_id}/files/{rel_path:path}")
-def get_job_file(job_id: str, rel_path: str) -> FileResponse:
+def get_job_file(
+    job_id: str,
+    rel_path: str,
+    offset: Optional[int] = None,
+    length: Optional[int] = None,
+):
+    """Serve a job output file. With no query params, returns the whole file
+    (handy for curl/browser debugging). With ?offset=&length=, returns just
+    that byte range as raw bytes plus X-Total-Size/X-Chunk-* headers — the
+    mini program downloads results this way in small chunks, because
+    wx.cloud.callContainer errors out (system error -606002) on responses
+    above some undocumented size threshold."""
     job_dir = (OUTPUT_ROOT / job_id / "result").resolve()
     file_path = (job_dir / rel_path).resolve()
     if not file_path.is_relative_to(job_dir) or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Not found")
-    return FileResponse(file_path)
+
+    if offset is None:
+        return FileResponse(file_path)
+
+    size = file_path.stat().st_size
+    if offset < 0 or offset > size:
+        raise HTTPException(status_code=416, detail="offset out of range")
+    with file_path.open("rb") as f:
+        f.seek(offset)
+        chunk = f.read(length if length is not None else size - offset)
+    return Response(
+        content=chunk,
+        media_type="application/octet-stream",
+        headers={
+            "X-Total-Size": str(size),
+            "X-Chunk-Offset": str(offset),
+            "X-Chunk-Length": str(len(chunk)),
+        },
+    )
