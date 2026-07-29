@@ -4,3 +4,6 @@ numpy>=1.26
 matplotlib>=3.8
 librosa>=0.10
 soundfile>=0.12
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9

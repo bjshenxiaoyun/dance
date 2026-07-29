@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import cv2
-import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 
 from angles import JOINT_CN, JOINT_FOCUS, POSE_CONNECTIONS
