@@ -1,0 +1,26 @@
+{
+  "overall_score": 3.23,
+  "lag_frames": -9,
+  "joint_mae": {
+    "left_elbow": 50.94,
+    "right_elbow": 43.56,
+    "left_shoulder": 40.31,
+    "right_shoulder": 60.77,
+    "left_hip": 47.61,
+    "right_hip": 36.73,
+    "left_knee": 15.04,
+    "right_knee": 2.19
+  },
+  "suggestions": [
+    "整体节奏偏快约 0.30s（9 帧），建议稍晚启动、跟住老师节拍。",
+    "右肩 偏差较大（平均约 61°），重点对照老师该关节开合幅度。",
+    "左肘 偏差较大（平均约 51°），重点对照老师该关节开合幅度。",
+    "左髋 偏差较大（平均约 48°），重点对照老师该关节开合幅度。",
+    "右肘 偏差较大（平均约 44°），重点对照老师该关节开合幅度。"
+  ],
+  "outputs": {
+    "video": "output/real/comparison.mp4",
+    "chart": "output/real/joint_errors.png",
+    "report": "output/real/report.md"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "overall_score": 90.93,
+  "lag_frames": 7,
+  "expected_lag_frames": 8,
+  "joint_mae": {
+    "left_elbow": 0.0,
+    "right_elbow": 5.98,
+    "left_shoulder": 0.0,
+    "right_shoulder": 25.74,
+    "left_hip": 0.62,
+    "right_hip": 0.0,
+    "left_knee": 0.33,
+    "right_knee": 0.0
+  },
+  "suggestions": [
+    "整体节奏偏慢约 0.23s（7 帧），建议提前启动动作。",
+    "右肩 偏差较大（平均约 26°），重点对照老师该关节开合幅度。"
+  ],
+  "outputs": {
+    "video": "/Users/a58/Desktop/sxy/dance/output/demo/comparison.mp4",
+    "chart": "/Users/a58/Desktop/sxy/dance/output/demo/joint_errors.png",
+    "report": "/Users/a58/Desktop/sxy/dance/output/demo/report.md"
+  }
+}
