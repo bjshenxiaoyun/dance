@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import shutil
 import sys
+import threading
 import urllib.request
 import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -27,6 +28,13 @@ from pipeline import run_comparison  # noqa: E402
 OUTPUT_ROOT = ROOT / "output" / "api"
 
 app = FastAPI(title="Dance Compare API")
+
+# In-memory job status store. Good enough for a single-instance container;
+# if the service ever scales to multiple replicas this needs a shared store
+# (e.g. redis) since a status poll could land on a different instance than
+# the one running the job.
+JOBS: dict[str, dict] = {}
+JOBS_LOCK = threading.Lock()
 
 
 @app.get("/")
@@ -84,13 +92,7 @@ class CompareByUrlRequest(BaseModel):
     max_downbeats: int = 20
 
 
-@app.post("/compare_by_url")
-def compare_by_url(req: CompareByUrlRequest) -> dict:
-    """Same as /compare, but takes downloadable URLs instead of multipart file
-    uploads — used by clients (e.g. the mini program) whose upload channel has
-    a small request-body size limit, so the video itself has to go through
-    object storage first and only the URL is sent here."""
-    job_id = uuid.uuid4().hex[:12]
+def _run_compare_job(job_id: str, req: CompareByUrlRequest) -> None:
     job_dir = OUTPUT_ROOT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,10 +101,7 @@ def compare_by_url(req: CompareByUrlRequest) -> dict:
     try:
         urllib.request.urlretrieve(req.teacher_url, teacher_path)
         urllib.request.urlretrieve(req.student_url, student_path)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"下载视频失败: {e}") from e
 
-    try:
         summary = run_comparison(
             teacher_path,
             student_path,
@@ -113,11 +112,40 @@ def compare_by_url(req: CompareByUrlRequest) -> dict:
             meter=req.meter,
             max_downbeats=req.max_downbeats,
         )
+        summary["job_id"] = job_id
+        with JOBS_LOCK:
+            JOBS[job_id] = {"status": "done", "summary": summary}
     except Exception as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        with JOBS_LOCK:
+            JOBS[job_id] = {"status": "error", "error": str(e)}
 
-    summary["job_id"] = job_id
-    return summary
+
+@app.post("/compare_by_url")
+def compare_by_url(req: CompareByUrlRequest, background_tasks: BackgroundTasks) -> dict:
+    """Same as /compare, but takes downloadable URLs instead of multipart file
+    uploads — used by clients (e.g. the mini program) whose upload channel has
+    a small request-body size limit, so the video itself has to go through
+    object storage first and only the URL is sent here.
+
+    Runs the actual comparison in the background and returns immediately,
+    because the full pipeline (download + pose extraction + rendering) easily
+    takes longer than the synchronous timeout of clients calling through the
+    WeChat cloud-call gateway (wx.cloud.callContainer). Poll
+    /jobs/{job_id}/status for completion."""
+    job_id = uuid.uuid4().hex[:12]
+    with JOBS_LOCK:
+        JOBS[job_id] = {"status": "processing"}
+    background_tasks.add_task(_run_compare_job, job_id, req)
+    return {"job_id": job_id, "status": "processing"}
+
+
+@app.get("/jobs/{job_id}/status")
+def get_job_status(job_id: str) -> dict:
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return job
 
 
 @app.get("/jobs/{job_id}/files/{rel_path:path}")
